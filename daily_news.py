@@ -1,6 +1,6 @@
 """Daily News Digest — 金融硕士备考视角"""
 
-import urllib.request, json, sys, ssl
+import urllib.request, json, sys, ssl, re, html as html_mod
 import feedparser
 from datetime import datetime, timezone, timedelta
 
@@ -22,9 +22,9 @@ SSL_CTX = ssl.create_default_context()
 SSL_CTX.check_hostname = False
 SSL_CTX.verify_mode = ssl.CERT_NONE
 
-MAX_PER_SOURCE = 4
+MAX_PER_SOURCE = 3  # 减少条数，给摘要留空间
 
-# ── 翻译器（惰性初始化）──
+# ── 翻译器 ──
 _translator = None
 
 def get_translator():
@@ -35,15 +35,13 @@ def get_translator():
             _translator = GoogleTranslator(source="auto", target="zh-CN")
             _translator.translate("test")
         except Exception:
-            _translator = False  # 标记不可用
+            _translator = False
     return _translator if _translator else None
 
 
 def translate_to_cn(text):
-    """英→中翻译，失败则返回原文"""
     t = get_translator()
-    if t is None:
-        return text
+    if t is None: return text
     try:
         result = t.translate(text)
         return result if result else text
@@ -52,59 +50,26 @@ def translate_to_cn(text):
 
 
 def needs_translation(text):
-    """判断是否包含非中文字符（需要翻译）"""
     chinese_chars = sum(1 for c in text if '一' <= c <= '鿿')
     return chinese_chars < len(text) * 0.3
 
 
-def extract_summary(title, category):
-    """从标题提取具体摘要标签"""
-    t = title.lower()
+def clean_html(raw):
+    """去除 HTML 标签，提取纯文本"""
+    if not raw: return ""
+    text = re.sub(r'<[^>]+>', '', raw)
+    text = html_mod.unescape(text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
 
-    # 金融财经类
-    if "金融" in category or "市场" in category:
-        if any(w in t for w in ["央行", "利率", "通胀", "fed", "ecb", "cpi"]):
-            return "→ 货币政策信号"
-        if any(w in t for w in ["贸易", "关税", "tariff", "trade", "export"]):
-            return "→ 国际贸易博弈"
-        if any(w in t for w in ["油价", "能源", "oil", "energy", "gold", "黄金"]):
-            return "→ 大宗商品动向"
-        if any(w in t for w in ["股", "stock", "market", "指数", "ipo"]):
-            return "→ 资本市场波动"
-        if any(w in t for w in ["人民", "汇率", "yen", "dollar", "fx", "rmb"]):
-            return "→ 汇率与资本流动"
-        return "→ 宏观经济信号"
 
-    # 产业科技类
-    if "产业" in category or "科技" in category:
-        if any(w in t for w in ["ai", "人工智能", "大模型", "gpt", "llm", "智能"]):
-            return "→ AI 产业落地"
-        if any(w in t for w in ["新能源", "电动", "ev", "光伏", "锂电", "储能"]):
-            return "→ 新能源产业"
-        if any(w in t for w in ["芯片", "半导体", "chip", "算力", "gpu"]):
-            return "→ 半导体竞争"
-        if any(w in t for w in ["电商", "跨境", "出海", "国际化"]):
-            return "→ 中企全球化"
-        return "→ 产业趋势观察"
-
-    # 国际地缘类
-    if "国际" in category or "地缘" in category:
-        if any(w in t for w in ["iran", "伊朗", "israel", "以色列", "中东", "middle east"]):
-            return "→ 中东局势"
-        if any(w in t for w in ["ukraine", "乌克兰", "russia", "俄罗斯", "nato"]):
-            return "→ 俄乌冲突"
-        if any(w in t for w in ["china", "中国", "beijing", "xi", "taiwan", "台湾"]):
-            return "→ 中美关系"
-        if any(w in t for w in ["trump", "特朗普", "biden", "拜登", "election", "选举"]):
-            return "→ 国际政治变局"
-        if any(w in t for w in ["eu", "europe", "欧洲", "germany", "德国", "france", "法国"]):
-            return "→ 欧洲政经"
-        return "→ 地缘政治风险"
-
-    return "→ 关注"
+def truncate(text, max_len):
+    if len(text) <= max_len: return text
+    return text[:max_len-1] + "…"
 
 
 def fetch_feed(name, url):
+    """返回 [{title, summary, link}, ...]"""
     try:
         req = urllib.request.Request(url, headers=HEADERS)
         with urllib.request.urlopen(req, timeout=20, context=SSL_CTX) as resp:
@@ -113,7 +78,15 @@ def fetch_feed(name, url):
         items = []
         for entry in feed.entries[:MAX_PER_SOURCE]:
             title = entry.get("title", "").strip()
-            items.append(title)
+            link = entry.get("link", "")
+            # 摘要：优先用 summary，其次 description，再次 content
+            raw_summary = (
+                entry.get("summary", "") or
+                entry.get("description", "") or
+                ""
+            )
+            summary = clean_html(raw_summary)
+            items.append({"title": title, "summary": summary, "link": link})
         return items
     except Exception as e:
         print(f"  [{name}] 暂时不可用 ({type(e).__name__})", file=sys.stderr)
@@ -124,15 +97,15 @@ def collect_all():
     result = {}
     for category, name, url in FEEDS:
         print(f"  正在获取 {name}...", file=sys.stderr)
-        titles = fetch_feed(name, url)
-        if titles:
+        entries = fetch_feed(name, url)
+        if entries:
             clean = []
             seen = set()
-            for t in titles:
-                key = t[:40]
+            for e in entries:
+                key = e["title"][:40]
                 if key not in seen:
                     seen.add(key)
-                    clean.append(t)
+                    clean.append(e)
             result[category] = clean[:MAX_PER_SOURCE]
         else:
             result[category] = []
@@ -147,43 +120,51 @@ def format_digest(news):
 
     lines = [
         f"【每日资讯摘要】{today_str} 周{weekday}",
-        f"考研初试倒计时 {days_left} 天 · 今日关注要点如下",
-        "─" * 30,
+        f"距考研初试 {days_left} 天 · 今日要闻",
+        "─" * 28,
     ]
 
     total = 0
-    for category, titles in news.items():
+    for category, items in news.items():
         lines.append(f"\n▎{category}")
-        if not titles:
+        if not items:
             lines.append("  （暂无更新）")
         else:
-            for i, t in enumerate(titles, 1):
-                # 翻译
-                if needs_translation(t):
-                    cn_title = translate_to_cn(t)
-                    if cn_title and cn_title != t:
-                        display = cn_title
-                    else:
-                        display = t
+            for i, e in enumerate(items, 1):
+                title = e["title"]
+                summary = e["summary"]
+                link = e["link"]
+
+                # 翻译英文标题
+                if needs_translation(title):
+                    display = translate_to_cn(title)
+                    if not display or display == title:
+                        display = title
                 else:
-                    display = t
+                    display = title
 
-                # 截断
-                if len(display) > 80:
-                    display = display[:77] + "..."
-
+                display = truncate(display, 80)
                 lines.append(f"  {i}. {display}")
 
-                # 摘要
-                summary = extract_summary(t, category)
+                # 摘要（限长80字）
                 if summary:
+                    # 如果是英文摘要，翻译
+                    if needs_translation(summary):
+                        cn_summary = translate_to_cn(summary)
+                        if cn_summary and cn_summary != summary:
+                            summary = cn_summary
+                    summary = truncate(summary, 100)
                     lines.append(f"     {summary}")
+
+                # 链接
+                if link:
+                    # 企业微信支持超链接格式
+                    lines.append(f"     🔗 {link}")
 
                 total += 1
 
-    lines.append(f"\n{'─' * 30}")
+    lines.append(f"\n{'─' * 28}")
     lines.append(f"共 {total} 条 | {now.strftime('%H:%M')} 生成")
-    lines.append("FT中文 · 36氪 · Google News · BBC")
 
     return "\n".join(lines)
 
