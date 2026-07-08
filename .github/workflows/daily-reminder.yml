@@ -26,7 +26,9 @@ jobs:
           WEBHOOK_URL: ${{ secrets.WECHAT_WEBHOOK_URL }}
         if: env.WEBHOOK_URL != ''
         run: |
-          MSG=$(cat today_msg.txt)
+          TITLE="课程提醒"
+          DESP=$(cat today_msg.txt)
           curl -X POST "$WEBHOOK_URL" \
-            -H "Content-Type: application/json" \
-            -d "$(jq -n --arg msg "$MSG" '{msgtype:"text",text:{content:$msg}}')"
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            --data-urlencode "title=$TITLE" \
+            --data-urlencode "desp=$DESP"
