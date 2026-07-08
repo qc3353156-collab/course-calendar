@@ -1,0 +1,32 @@
+name: 每日课程提醒
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install icalendar
+      - name: Check today's courses
+        id: check
+        run: |
+          python3 check_today.py > today_msg.txt
+          cat today_msg.txt
+      - name: Send notification
+        env:
+          WEBHOOK_URL: ${{ secrets.WECHAT_WEBHOOK_URL }}
+        if: env.WEBHOOK_URL != ''
+        run: |
+          MSG=$(cat today_msg.txt)
+          curl -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --arg msg "$MSG" '{msgtype:"text",text:{content:$msg}}')"
