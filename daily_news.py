@@ -142,7 +142,7 @@ def collect_all():
 def format_digest(news):
     today_str = now.strftime("%Y年%m月%d日")
     weekday = ["一", "二", "三", "四", "五", "六", "日"][now.weekday()]
-    exam_date = datetime(2026, 12, 26, tzinfo=CST)
+    exam_date = datetime(2026, 12, 19, tzinfo=CST)
     days_left = (exam_date.date() - now.date()).days
 
     lines = [
