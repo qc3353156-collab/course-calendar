@@ -8,11 +8,19 @@ CST = timezone(timedelta(hours=8))
 now = datetime.now(CST)
 
 FEEDS = [
-    ("宏观政策 · 金融财经", "FT中文网", "https://www.ftchinese.com/rss/news"),
-    ("产业经济 · 科技前沿", "36氪", "https://36kr.com/feed"),
-    ("全球市场 · 要闻", "Google News 财经", "https://news.google.com/rss/search?q=global+finance+markets&hl=en-US&gl=US&ceid=US:en"),
-    ("国际局势 · 地缘", "BBC News", "http://feeds.bbci.co.uk/news/world/rss.xml"),
+    # (类别, 来源, RSS URL)
+    ("国际财经", "WSJ",    "https://feeds.a.dj.com/rss/RSSWorldNews.xml"),
+    ("国际财经", "CNBC",   "https://www.cnbc.com/id/100003114/device/rss/rss.html"),
+    ("国内财经", "FT中文", "https://www.ftchinese.com/rss/news"),
+    ("国内财经", "雪球",   "https://xueqiu.com/hots/topic/rss"),
+    ("国内财经", "Google中国财经", "https://news.google.com/rss/search?q=china+finance+economy&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"),
+    ("国际要闻", "Guardian", "https://www.theguardian.com/world/rss"),
+    ("国际要闻", "BBC",      "http://feeds.bbci.co.uk/news/world/rss.xml"),
+    ("产业科技", "36氪",   "https://36kr.com/feed"),
 ]
+# 同一类别的源会合并去重
+
+MAX_PER_SOURCE = 2  # 每个源取2条，合并后每类约4-6条
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -21,8 +29,6 @@ HEADERS = {
 SSL_CTX = ssl.create_default_context()
 SSL_CTX.check_hostname = False
 SSL_CTX.verify_mode = ssl.CERT_NONE
-
-MAX_PER_SOURCE = 3  # 减少条数，给摘要留空间
 
 # ── 翻译器 ──
 _translator = None
@@ -106,9 +112,13 @@ def collect_all():
                 if key not in seen:
                     seen.add(key)
                     clean.append(e)
-            result[category] = clean[:MAX_PER_SOURCE]
+            if category in result:
+                result[category].extend(clean[:MAX_PER_SOURCE])
+            else:
+                result[category] = clean[:MAX_PER_SOURCE]
         else:
-            result[category] = []
+            if category not in result:
+                result[category] = []
     return result
 
 
