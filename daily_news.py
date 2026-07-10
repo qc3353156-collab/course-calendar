@@ -17,6 +17,7 @@ FEEDS = [
     ("国际要闻", "Guardian", "https://www.theguardian.com/world/rss"),
     ("国际要闻", "BBC",      "http://feeds.bbci.co.uk/news/world/rss.xml"),
     ("产业科技", "36氪",   "https://36kr.com/feed"),
+    ("产业科技", "量子位", "https://www.qbitai.com/feed"),
 ]
 # 同一类别的源会合并去重
 
@@ -32,16 +33,21 @@ SSL_CTX.verify_mode = ssl.CERT_NONE
 
 # ── 翻译器 ──
 _translator = None
+_trans_available = False
 
 def get_translator():
-    global _translator
+    global _translator, _trans_available
     if _translator is None:
         try:
             from deep_translator import GoogleTranslator
             _translator = GoogleTranslator(source="auto", target="zh-CN")
             _translator.translate("test")
-        except Exception:
+            _trans_available = True
+            print("  翻译器就绪", file=sys.stderr)
+        except Exception as e:
             _translator = False
+            _trans_available = False
+            print(f"  翻译器不可用: {e}", file=sys.stderr)
     return _translator if _translator else None
 
 
@@ -148,27 +154,27 @@ def format_digest(news):
                 # 翻译英文标题
                 if needs_translation(title):
                     display = translate_to_cn(title)
-                    if not display or display == title:
-                        display = title
+                    if display and display != title:
+                        pass  # 翻译成功
+                    else:
+                        display = f"[EN] {title}"  # 翻译失败则标注
                 else:
                     display = title
 
                 display = truncate(display, 80)
                 lines.append(f"  {i}. {display}")
 
-                # 摘要（限长80字）
+                # 摘要（限60字）
                 if summary:
-                    # 如果是英文摘要，翻译
                     if needs_translation(summary):
                         cn_summary = translate_to_cn(summary)
                         if cn_summary and cn_summary != summary:
                             summary = cn_summary
-                    summary = truncate(summary, 100)
+                    summary = truncate(summary, 60)
                     lines.append(f"     {summary}")
 
-                # 链接
-                if link:
-                    # 企业微信支持超链接格式
+                # 仅第一条附链接
+                if i == 1 and link:
                     lines.append(f"     🔗 {link}")
 
                 total += 1
