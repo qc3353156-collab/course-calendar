@@ -1,22 +1,18 @@
 """Check today's courses - GitHub Actions daily reminder"""
 
-
 from datetime import datetime, timezone, timedelta
 from urllib.request import urlopen
 from icalendar import Calendar
 import random
 import sys
 
-
 CST = timezone(timedelta(hours=8))
 EXAM_DATE = datetime(2026, 12, 19, tzinfo=CST)
 
-
 ICS_URLS = [
-    "https://raw.githubusercontent.com/qc3353156-collab/course-calendar/main/396%E5%85%A8%E9%83%A8%E8%AF%BE%E7%A8%8B.ics",
-    "https://raw.githubusercontent.com/qc3353156-collab/course-calendar/main/431%E5%85%A8%E9%83%A8%E8%AF%BE%E7%A8%8B.ics",
+    "https://raw.githubusercontent.com/qc3353156-collab/course-calendar/main/396全部课程.ics",
+    "https://raw.githubusercontent.com/qc3353156-collab/course-calendar/main/431全部课程.ics",
 ]
-
 
 QUOTES = [
     "你今天受的苦，都会变成考场上你手里的分。",
@@ -35,7 +31,6 @@ QUOTES = [
     "累了就歇一下，但别停下来。",
 ]
 
-
 def get_today_events():
     today = datetime.now(CST).date()
     all_events = []
@@ -52,20 +47,42 @@ def get_today_events():
                     start = dt.astimezone(CST).strftime("%H:%M")
                 else:
                     event_date = dt
-                    start = "All day"
+                    start = "全天"
                 if event_date == today:
                     summary = str(component.get("summary", ""))
                     all_events.append((start, summary))
         except Exception as e:
-            print(f"Error: {e}", file=sys.stderr)
-    all_events.sort(key=lambda x: x[0] if x[0] != "All day" else "99:99")
+            print(f"ICS Error: {e}", file=sys.stderr)
+    all_events.sort(key=lambda x: x[0] if x[0] != "全天" else "99:99")
     return today, all_events
 
-
 def format_message(today, events):
-    wd = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][today.weekday()]
+    wd = ["一","二","三","四","五","六","日"][today.weekday()]
     days_left = (EXAM_DATE.date() - today).days
     quote = random.choice(QUOTES)
+    header = "U0001F4C5 " + today.strftime("%m月%d日") + " 周" + wd + "  |  考研倒计时 " + str(days_left) + " 天"
+    sep = "─" * 28
+    if not events:
+        body = "U0001F4DA 今天没有课，但图书馆永远有空座位，去刷题吧！"
+    else:
+        lines = []
+        for start, summary in events:
+            tag = "U0001F539" if "396" in summary else "U0001F538"
+            lines.append("  " + tag + " " + start + "  " + summary)
+        body = "U0001F3AB 今日课程 (" + str(len(events)) + " 节):
+" + "
+".join(lines)
+        body += "
 
+U0001F4D6 课后记得去图书馆巩固！"
+    msg = header + "
+" + sep + "
+" + body + "
+" + sep + "
+U0001F4AC " + quote
+    return msg
 
-    header = f"{chr(0x1F4C5)} {today.strftime('%m/%d')} {wd}  |  考研倒计时 {days_left} 天"
+if __name__ == "__main__":
+    today, events = get_today_events()
+    msg = format_message(today, events)
+    print(msg)
