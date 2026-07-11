@@ -10,8 +10,8 @@ CST = timezone(timedelta(hours=8))
 EXAM_DATE = datetime(2026, 12, 19, tzinfo=CST)
 
 ICS_URLS = [
-    "https://raw.githubusercontent.com/qc3353156-collab/course-calendar/main/396全部课程.ics",
-    "https://raw.githubusercontent.com/qc3353156-collab/course-calendar/main/431全部课程.ics",
+    "https://raw.githubusercontent.com/qc3353156-collab/course-calendar/main/396%E5%85%A8%E9%83%A8%E8%AF%BE%E7%A8%8B.ics",
+    "https://raw.githubusercontent.com/qc3353156-collab/course-calendar/main/431%E5%85%A8%E9%83%A8%E8%AF%BE%E7%A8%8B.ics",
 ]
 
 QUOTES = [
@@ -47,39 +47,34 @@ def get_today_events():
                     start = dt.astimezone(CST).strftime("%H:%M")
                 else:
                     event_date = dt
-                    start = "全天"
+                    start = "AllDay"
                 if event_date == today:
                     summary = str(component.get("summary", ""))
                     all_events.append((start, summary))
         except Exception as e:
             print(f"ICS Error: {e}", file=sys.stderr)
-    all_events.sort(key=lambda x: x[0] if x[0] != "全天" else "99:99")
+    all_events.sort(key=lambda x: x[0] if x[0] != "AllDay" else "99:99")
     return today, all_events
 
 def format_message(today, events):
-    wd = ["一","二","三","四","五","六","日"][today.weekday()]
+    wd = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][today.weekday()]
     days_left = (EXAM_DATE.date() - today).days
     quote = random.choice(QUOTES)
-    header = "U0001F4C5 " + today.strftime("%m月%d日") + " 周" + wd + "  |  考研倒计时 " + str(days_left) + " 天"
-    sep = "─" * 28
+
+    header = "[课程提醒] " + today.strftime("%m/%d") + " " + wd + "  |  考研倒计时 " + str(days_left) + " 天"
+    sep = "---"
+
     if not events:
-        body = "U0001F4DA 今天没有课，但图书馆永远有空座位，去刷题吧！"
+        body = "[今日无课] 没有课的日子也要去图书馆刷题！"
     else:
         lines = []
         for start, summary in events:
-            tag = "U0001F539" if "396" in summary else "U0001F538"
+            tag = "[396]" if "396" in summary else "[431]"
             lines.append("  " + tag + " " + start + "  " + summary)
-        body = "U0001F3AB 今日课程 (" + str(len(events)) + " 节):
-" + "
-".join(lines)
-        body += "
+        body = "今日课程 (" + str(len(events)) + " 节):\n" + "\n".join(lines)
+        body += "\n\n>> 课后记得去图书馆巩固！"
 
-U0001F4D6 课后记得去图书馆巩固！"
-    msg = header + "
-" + sep + "
-" + body + "
-" + sep + "
-U0001F4AC " + quote
+    msg = header + "\n" + sep + "\n" + body + "\n" + sep + "\n" + quote
     return msg
 
 if __name__ == "__main__":
