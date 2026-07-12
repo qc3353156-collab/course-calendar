@@ -16,6 +16,8 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: pip install feedparser deep-translator
+      - name: Validate Python syntax
+        run: python3 -m py_compile daily_news.py
       - name: Fetch and push news
         env:
           WEBHOOK_URL: ${{ secrets.WECHAT_WEBHOOK_URL }}
