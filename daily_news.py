@@ -27,9 +27,9 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
 
-SSL_CTX = ssl.create_default_context()
-SSL_CTX.check_hostname = False
-SSL_CTX.verify_mode = ssl.CERT_NONE
+# WeChat bot text message limit (bytes)
+WECHAT_MAX_BYTES = 2048
+
 
 # ── 翻译器 ──
 _translator = None
@@ -84,14 +84,13 @@ def fetch_feed(name, url):
     """返回 [{title, summary, link}, ...]"""
     try:
         req = urllib.request.Request(url, headers=HEADERS)
-        with urllib.request.urlopen(req, timeout=20, context=SSL_CTX) as resp:
+        with urllib.request.urlopen(req, timeout=20) as resp:
             data = resp.read()
         feed = feedparser.parse(data)
         items = []
         for entry in feed.entries[:MAX_PER_SOURCE]:
             title = entry.get("title", "").strip()
             link = entry.get("link", "")
-            # 摘要：优先用 summary，其次 description，再次 content
             raw_summary = (
                 entry.get("summary", "") or
                 entry.get("description", "") or
@@ -151,20 +150,18 @@ def format_digest(news):
                 summary = e["summary"]
                 link = e["link"]
 
-                # 翻译英文标题
                 if needs_translation(title):
                     display = translate_to_cn(title)
                     if display and display != title:
-                        pass  # 翻译成功
+                        pass
                     else:
-                        display = f"[EN] {title}"  # 翻译失败则标注
+                        display = f"[EN] {title}"
                 else:
                     display = title
 
                 display = truncate(display, 80)
                 lines.append(f"  {i}. {display}")
 
-                # 摘要（限60字）
                 if summary:
                     if needs_translation(summary):
                         cn_summary = translate_to_cn(summary)
@@ -173,9 +170,8 @@ def format_digest(news):
                     summary = truncate(summary, 60)
                     lines.append(f"     {summary}")
 
-                # 仅第一条附链接
                 if i == 1 and link:
-                    lines.append(f"     🔗 {link}")
+                    lines.append(f"     \U0001f517 {link}")
 
                 total += 1
 
@@ -183,6 +179,35 @@ def format_digest(news):
     lines.append(f"共 {total} 条 | {now.strftime('%H:%M')} 生成")
 
     return "\n".join(lines)
+
+
+def truncate_to_bytes(msg, max_bytes):
+    """Truncate message to fit within max_bytes (UTF-8)"""
+    encoded = msg.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return msg
+    # Binary search for the right cut point
+    lo, hi = 0, len(msg)
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if len(msg[:mid].encode("utf-8")) <= max_bytes:
+            lo = mid
+        else:
+            hi = mid - 1
+    return msg[:lo] + "…"
+
+
+def push_to_wecom(webhook, msg):
+    """Push message to WeChat bot, with length truncation if needed"""
+    msg = truncate_to_bytes(msg, WECHAT_MAX_BYTES)
+    payload = json.dumps({"msgtype": "text", "text": {"content": msg}}).encode()
+    req = urllib.request.Request(
+        webhook, data=payload,
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        result = resp.read().decode()
+        print(f"推送结果: {result}", file=sys.stderr)
 
 
 if __name__ == "__main__":
@@ -193,13 +218,6 @@ if __name__ == "__main__":
 
     webhook = sys.argv[1] if len(sys.argv) > 1 else ""
     if webhook:
-        payload = json.dumps({"msgtype": "text", "text": {"content": msg}}).encode()
-        req = urllib.request.Request(
-            webhook, data=payload,
-            headers={"Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=10, context=SSL_CTX) as resp:
-            result = resp.read().decode()
-            print(f"推送结果: {result}", file=sys.stderr)
+        push_to_wecom(webhook, msg)
     else:
         print("(未提供 webhook URL，仅预览)", file=sys.stderr)
