@@ -3,8 +3,6 @@ name: 每日课程提醒
 on:
   schedule:
     - cron: "0 0 * * *"
-    - cron: "0 6 * * *"
-    - cron: "0 10 * * *"
   workflow_dispatch:
 
 jobs:
@@ -18,6 +16,8 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: pip install icalendar
+      - name: Validate Python syntax
+        run: python3 -m py_compile check_today.py
       - name: Check today's courses
         id: check
         run: |
@@ -29,6 +29,10 @@ jobs:
         if: env.WEBHOOK_URL != ''
         run: |
           MSG=$(cat today_msg.txt)
+          if [ -z "$MSG" ]; then
+            echo "Empty message, skipping push"
+            exit 0
+          fi
           curl -X POST "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
             -d "$(jq -n --arg content "$MSG" '{msgtype:"text",text:{$content}}')"
